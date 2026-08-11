@@ -1,3 +1,6 @@
 extracted/
 out/
 *.log
+build/
+lib-linux/
+prex-launcher.jar
