@@ -65,6 +65,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download installer EXE
         uses: actions/download-artifact@v4
         with:
@@ -76,6 +79,22 @@ jobs:
         with:
           name: PrexLauncher-portable-zip
           path: release/
+
+      - name: Package source code zip
+        shell: bash
+        run: |
+          mkdir -p src
+          cd src && unzip -q ../minecraft-launcher.zip && cd ..
+          mkdir -p PrexLauncher-${{ github.ref_name }}/src/main/java
+          mkdir -p PrexLauncher-${{ github.ref_name }}/src/main/resources
+          cp -r src/src/main/java/* PrexLauncher-${{ github.ref_name }}/src/main/java/
+          cp -r src/src/main/resources/* PrexLauncher-${{ github.ref_name }}/src/main/resources/
+          cp build-exe.bat app-icon.ico .gitignore PrexLauncher-${{ github.ref_name }}/
+          cp -r .github PrexLauncher-${{ github.ref_name }}/
+          cd PrexLauncher-${{ github.ref_name }}
+          zip -r PrexLauncher-source.zip .
+          cd ..
+          mv PrexLauncher-${{ github.ref_name }}/PrexLauncher-source.zip release/
 
       - name: Create GitHub Release with permanent download links
         uses: softprops/action-gh-release@v2
@@ -90,6 +109,7 @@ jobs:
             ### Downloads
             - **Installer EXE** — `PrexLauncher-1.7.1.exe` (self-contained, no Java needed on target PC)
             - **Portable ZIP** — `PrexLauncher-portable.zip` (unzip & run, no install)
+            - **Source code ZIP** — `PrexLauncher-source.zip`
 
             Built automatically by GitHub Actions.
           files: |
