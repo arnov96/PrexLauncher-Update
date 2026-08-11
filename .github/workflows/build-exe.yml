@@ -1,0 +1,98 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:        # manual trigger: Actions → "Build Windows EXE" → Run workflow
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+
+jobs:
+  build-exe:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Verify fat jar
+        shell: pwsh
+        run: |
+          if (-not (Test-Path dist/prex-launcher.jar)) { throw "dist/prex-launcher.jar missing — commit it to the repo" }
+          Get-Item dist/prex-launcher.jar | Select-Object Name, Length
+
+      - name: Build portable app image + EXE installer
+        shell: pwsh
+        run: |
+          jpackage --type app-image --name PrexLauncher --app-version 1.7.1 --vendor "Prex" `
+            --input dist --main-jar prex-launcher.jar --main-class com.prex.launcher.Main `
+            --dest out
+          jpackage --type exe --name PrexLauncher --app-version 1.7.1 --vendor "Prex" `
+            --input dist --main-jar prex-launcher.jar --main-class com.prex.launcher.Main `
+            --dest out --win-menu --win-shortcut
+          Compress-Archive -Path out\PrexLauncher -DestinationPath out\PrexLauncher-portable.zip -Force
+          Get-ChildItem out | Select-Object Name, Length
+
+      - name: Upload portable EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrexLauncher-portable
+          path: out/PrexLauncher
+          if-no-files-found: error
+
+      - name: Upload installer EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrexLauncher-installer
+          path: out/*.exe
+          if-no-files-found: error
+
+      - name: Upload portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrexLauncher-portable-zip
+          path: out/*.zip
+          if-no-files-found: error
+
+  release:
+    needs: build-exe
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download installer EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: PrexLauncher-installer
+          path: release/
+
+      - name: Download portable zip
+        uses: actions/download-artifact@v4
+        with:
+          name: PrexLauncher-portable-zip
+          path: release/
+
+      - name: Create GitHub Release with permanent download links
+        uses: softprops/action-gh-release@v2
+        with:
+          name: PrexLauncher ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          body: |
+            ## Prex Launcher ${{ github.ref_name }}
+
+            Single-file Windows launcher with Modrinth mod manager.
+
+            ### Downloads
+            - **Installer EXE** — `PrexLauncher-1.7.1.exe` (self-contained, no Java needed on target PC)
+            - **Portable ZIP** — `PrexLauncher-portable.zip` (unzip & run, no install)
+
+            Built automatically by GitHub Actions.
+          files: |
+            release/*.exe
+            release/*.zip
+          generate_release_notes: false
